@@ -680,7 +680,7 @@ class Formatter(object):
 
         raise NotImplementedError
 
-    def format_fragment(self, fragment, replace=False):
+    def format_fragment(self, fragment, replace=False, keep_positions=False):
         """Returns a formatted version of the given text, using the "token"
         objects in the given :class:`Fragment`.
 
@@ -694,7 +694,7 @@ class Formatter(object):
         output = []
         index = fragment.startchar
         text = fragment.text
-
+        position_details = []
         for t in fragment.matches:
             if t.startchar is None:
                 continue
@@ -704,19 +704,34 @@ class Formatter(object):
                 output.append(self._text(text[index:t.startchar]))
             output.append(self.format_token(text, t, replace))
             index = t.endchar
+
+            position_details.append({"start":t.startchar, "end":t.endchar, "text":text[t.startchar:t.endchar]})
+
         output.append(self._text(text[index:fragment.endchar]))
 
         out_string = "".join(output)
-        return out_string
+        if not(keep_positions):
+            return out_string 
+        else:
+            return (out_string, position_details)
 
-    def format(self, fragments, replace=False):
+
+    def format(self, fragments, replace=False,keep_positions=False):
         """Returns a formatted version of the given text, using a list of
         :class:`Fragment` objects.
         """
 
-        formatted = [self.format_fragment(f, replace=replace)
-                     for f in fragments]
-        return self.between.join(formatted)
+        if(keep_positions):
+            formatted_details = [self.format_fragment(f, replace=replace, keep_positions=keep_positions) for f in fragments]
+            
+            position_details = [f[1] for f in formatted_details]
+            formatted = [f[0] for f in formatted_details]
+            return (self.between.join(formatted), position_details)
+
+        else:
+            formatted = [self.format_fragment(f, replace=replace, keep_positions=keep_positions)
+                        for f in fragments]
+            return self.between.join(formatted)
 
     def __call__(self, text, fragments):
         # For backwards compatibility
@@ -987,7 +1002,7 @@ class Highlighter(object):
         if token is not None:
             yield token
 
-    def highlight_hit(self, hitobj, fieldname, text=None, top=3, minscore=1, strict_phrase=False):
+    def highlight_hit(self, hitobj, fieldname, text=None, top=3, minscore=1, strict_phrase=False, keep_positions=False):
         results = hitobj.results
         schema = results.searcher.schema
         field = schema[fieldname]
@@ -1050,5 +1065,6 @@ class Highlighter(object):
 
         fragments = top_fragments(fragments, top, self.scorer, self.order,
                                   minscore=minscore)
-        output = self.formatter.format(fragments)
+
+        output = self.formatter.format(fragments, keep_positions=keep_positions)
         return output
